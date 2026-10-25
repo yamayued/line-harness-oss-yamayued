@@ -1,5 +1,6 @@
 import { PERSONALIZED_EMPTY, PERSONALIZED_SAVE_ERROR, isUnjournaledPersonalizedUncertainty, holdLegacyPersonalizedQueue, readPersonalizedIntent, pendingMatches, writePersonalizedIntent, holdPersonalizedIntent } from './broadcast-personalized-intent.js';
 import { personalizedFriendState, recordPersonalizedReceipt, releasePersonalizedClaim, finishPersonalizedClaim } from './broadcast-personalized-batch.js';
+import { claimBroadcastStart } from './broadcast-start-claim.js';
 import { buildMessages } from './message-group.js';
 import { BroadcastDeliveryError, BROADCAST_RECORDING_ERROR, broadcastDeliveryFailure, isDefiniteLineRejection } from './broadcast-delivery-error.js';
 import { BroadcastSenderError, resolveBroadcastSender } from './broadcast-sender.js';
@@ -528,11 +529,7 @@ export async function processScheduledBroadcasts(
     try {
       await resolveBroadcastSender(db, broadcast, lineClient);
       // Optimistic lock: claim this broadcast (scheduled → sending)
-      const lockResult = await db
-        .prepare(`UPDATE broadcasts SET status = 'sending' WHERE id = ? AND status = 'scheduled'`)
-        .bind(broadcast.id)
-        .run();
-      if (!lockResult.meta.changes || lockResult.meta.changes === 0) continue;
+      if (!await claimBroadcastStart(db, broadcast)) continue;
 
       await processBroadcastSend(db, lineClient, broadcast.id, workerUrl);
     } catch (err) {
